@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/gobs/args"
+	"github.com/gobs/sortedmap"
 )
 
 /*
@@ -58,7 +59,7 @@ func (m *Maker) AddTargets(targets, prereq, recipes []string) {
 			log.Fatalf("target already exists: %s\n", t)
 		}
 
-		m.targets[t] = &Target{name: t, prereq: prereq, recipes: recipes, tstamp: modtime(t)}
+		m.targets[t] = &Target{name: t, prereq: prereq, recipes: recipes, tstamp: modTime(t)}
 	}
 }
 
@@ -69,7 +70,7 @@ func (m *Maker) Process(target string, now time.Time) {
 
 	t := m.targets[target]
 	if t == nil {
-		mtime := modtime(target)
+		mtime := modTime(target)
 		if mtime.IsZero() {
 			log.Fatal("unknown target", target)
 			return
@@ -206,9 +207,20 @@ func readMakefile(mfile string) (maker *Maker) {
 
 func main() {
 	mfile := flag.String("f", "Makefile", "make file")
+	targets := flag.Bool("targets", false, "print available targets")
 	flag.Parse()
 
 	maker := readMakefile(*mfile)
+
+	if *targets {
+		fmt.Println("\nAvailable targets:")
+
+		for _, t := range sortedmap.AsSortedMap(maker.targets) {
+			fmt.Println("   ", t.Key)
+		}
+
+		return
+	}
 
 	if flag.NArg() == 0 {
 		maker.Process("", time.Now())
@@ -278,7 +290,7 @@ func parseTargets(parts []string) ([]string, []string) {
 	return nil, nil
 }
 
-func modtime(target string) (tstamp time.Time) {
+func modTime(target string) (tstamp time.Time) {
 	fi, err := os.Lstat(target)
 	if err != nil {
 		// log.Println(err)
