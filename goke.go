@@ -151,7 +151,7 @@ func readMakefile(mfile string) (maker *Maker) {
 		//
 		// variable assignment
 		//
-		if state == SStart && len(parts) > 2 && parts[1] == "=" {
+		if state == SStart && len(parts) >= 2 && parts[1] == "=" {
 			vars[parts[0]] = strings.Join(parts[2:], " ")
 			line = ""
 			continue
