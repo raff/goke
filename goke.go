@@ -48,48 +48,54 @@ type Maker struct {
 	start   string             // main target
 }
 
-func (m *Maker) AddTargets(target, prereq, recipes []string) {
+func (m *Maker) AddTargets(targets, prereq, recipes []string) {
 	if m.start == "" {
-		m.start = target[0]
+		m.start = targets[0]
 	}
 
-	for _, t := range target {
+	for _, t := range targets {
 		if _, ok := m.targets[t]; ok {
 			log.Fatalf("target already exists: %s\n", t)
 		}
 
-		m.targets[t] = &Target{name: t, prereq: prereq, recipes: recipes}
+		m.targets[t] = &Target{name: t, prereq: prereq, recipes: recipes, tstamp: modtime(t)}
 	}
 }
 
-func (m *Maker) Process(target string) {
-        if target == "" {
-            target = m.start
-        }
+func (m *Maker) Process(target string, now time.Time) {
+	if target == "" {
+		target = m.start
+	}
 
-        t := m.targets[target]
-        if t == nil {
-            log.Println("unknown target", target)
-            return
-        }
+	t := m.targets[target]
+	if t == nil {
+		mtime := modtime(target)
+		if mtime.IsZero() {
+			log.Fatal("unknown target", target)
+			return
+		}
 
-        if !t.tstamp.IsZero() {
-            log.Println("nothing to do for", target)
-            return
-        }
+		t = &Target{name: target, tstamp: mtime}
+		m.targets[target] = t
+	}
 
-        log.Println("target", target)
-        log.Println("depends on", t.prereq)
+	if t.tstamp.After(now) {
+		log.Println("nothing to do for", target)
+		return
+	}
 
-        for _, p := range t.prereq {
-            m.Process(p)
-        }
+	log.Println("target", target)
+	log.Printf("depends on %q\n", t.prereq)
 
-        for _, r := range t.recipes {
-            log.Printf("exec %q\n", r)
-        }
+	for _, p := range t.prereq {
+		m.Process(p, now)
+	}
 
-        t.tstamp = time.Now()
+	for _, r := range t.recipes {
+		log.Printf("exec %q\n", r)
+	}
+
+	t.tstamp = time.Now()
 }
 
 func readMakefile(mfile string) (maker *Maker) {
@@ -135,6 +141,14 @@ func readMakefile(mfile string) (maker *Maker) {
 
 		line = expandVariables(line)
 		parts := args.GetArgs(line, args.UserTokens("=:"))
+
+		// remove comments
+		for i, p := range parts {
+			if strings.HasPrefix(p, "#") {
+				parts = parts[:i]
+				break
+			}
+		}
 
 		//
 		// empty line
@@ -196,13 +210,13 @@ func main() {
 
 	maker := readMakefile(*mfile)
 
-        if flag.NArg() == 0 {
-            maker.Process("")
-        } else {
-            for _, target := range flag.Args() {
-                maker.Process(target)
-            }
-        }
+	if flag.NArg() == 0 {
+		maker.Process("", time.Now())
+	} else {
+		for _, target := range flag.Args() {
+			maker.Process(target, time.Now())
+		}
+	}
 }
 
 var reVar = regexp.MustCompile(`\$(\w+|\(\w+\)|\(ENV.\w+\))`) // $var or $(var)
@@ -262,4 +276,14 @@ func parseTargets(parts []string) ([]string, []string) {
 	}
 
 	return nil, nil
+}
+
+func modtime(target string) (tstamp time.Time) {
+	fi, err := os.Lstat(target)
+	if err != nil {
+		// log.Println(err)
+		return
+	}
+
+	return fi.ModTime()
 }
