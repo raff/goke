@@ -93,7 +93,21 @@ func (m *Maker) Process(target string, now time.Time) {
 	}
 
 	for _, r := range t.recipes {
-		log.Printf("exec %q\n", r)
+		if strings.HasPrefix(r, "@") {
+			r = strings.TrimSpace(r[1:])
+		} else {
+			log.Printf("exec %q\n", r)
+		}
+
+		ignore := false
+		if strings.HasPrefix(r, "-") {
+			r = strings.TrimSpace(r[1:])
+			ignore = true
+		}
+
+		if err := runCommand(r); err != nil && !ignore {
+			log.Fatal(err)
+		}
 	}
 
 	t.tstamp = time.Now()
@@ -177,12 +191,12 @@ func readMakefile(mfile string) (maker *Maker) {
 		switch state {
 		case SStart:
 			if indented {
-				error("unexpected indentation", line)
+				fatalError("unexpected indentation", line)
 			}
 
 			targets, prereq = parseTargets(parts)
 			if targets == nil {
-				error("invalid target", line)
+				fatalError("invalid target", line)
 			}
 
 			state = SRecipe
@@ -268,7 +282,7 @@ func trimContinuation(line string) string {
 	return line
 }
 
-func error(message, line string) {
+func fatalError(message, line string) {
 	log.Fatalf("%v near %q\n", message, line)
 }
 
