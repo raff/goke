@@ -196,6 +196,19 @@ func readMakefile(mfile string) (maker *Maker) {
 		indented := line[0] == ' ' || line[0] == '\t'
 
 		switch state {
+		case SRecipe:
+			if indented {
+				// XXX: line may still have comments in it
+				recipes = append(recipes, strings.TrimSpace(line))
+			} else {
+				addTargets()
+				goto process_sstart
+			}
+			break
+
+		process_sstart:
+			fallthrough
+
 		case SStart:
 			if indented {
 				fatalError("unexpected indentation", line)
@@ -207,13 +220,6 @@ func readMakefile(mfile string) (maker *Maker) {
 			}
 
 			state = SRecipe
-
-		case SRecipe:
-			if indented {
-				recipes = append(recipes, strings.TrimSpace(line))
-			} else {
-				addTargets()
-			}
 		}
 	}
 
@@ -301,18 +307,20 @@ func fatalError(message, line string) {
 	log.Fatalf("%v near %q\n", message, line)
 }
 
-func parseTargets(parts []string) ([]string, []string) {
-	if len(parts) == 0 {
-		return nil, nil
-	}
-
-	if parts[0] == ":" {
-		return nil, nil
-	}
-
+func parseTargets(parts []string) (targets []string, prereq []string) {
 	for i, p := range parts {
-		if p == ":" { // target separator
-			return parts[:i], parts[i+1:]
+		p = strings.TrimSpace(p)
+
+		switch p {
+		case "": // should check why I am getting this
+			continue
+
+		case ":": // target separator
+			prereq = parts[i+1:]
+			return
+
+		default:
+			targets = append(targets, p)
 		}
 	}
 
