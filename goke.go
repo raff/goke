@@ -47,6 +47,7 @@ func (t *Target) String() string {
 type Maker struct {
 	targets map[string]*Target // targets
 	start   string             // main target
+	dryrun  bool
 }
 
 func (m *Maker) AddTargets(targets, prereq, recipes []string) {
@@ -56,7 +57,7 @@ func (m *Maker) AddTargets(targets, prereq, recipes []string) {
 
 	for _, t := range targets {
 		if _, ok := m.targets[t]; ok {
-			log.Fatalf("target already exists: %s\n", t)
+			log.Fatalf("target %q already exists\n", t)
 		}
 
 		m.targets[t] = &Target{name: t, prereq: prereq, recipes: recipes, tstamp: modTime(t)}
@@ -72,7 +73,7 @@ func (m *Maker) Process(target string, now time.Time) {
 	if t == nil {
 		mtime := modTime(target)
 		if mtime.IsZero() {
-			log.Fatal("unknown target", target)
+			log.Fatalf("unknown target %q\n", target)
 			return
 		}
 
@@ -85,8 +86,10 @@ func (m *Maker) Process(target string, now time.Time) {
 		return
 	}
 
-	log.Println("target", target)
-	log.Printf("depends on %q\n", t.prereq)
+	log.Printf("target %q\n", target)
+	if len(t.prereq) > 0 {
+		log.Printf("  dependencies: %q\n", t.prereq)
+	}
 
 	for _, p := range t.prereq {
 		m.Process(p, now)
@@ -96,7 +99,11 @@ func (m *Maker) Process(target string, now time.Time) {
 		if strings.HasPrefix(r, "@") {
 			r = strings.TrimSpace(r[1:])
 		} else {
-			log.Printf("exec %q\n", r)
+			log.Printf("  run %q\n", r)
+		}
+
+		if m.dryrun {
+			continue
 		}
 
 		ignore := false
@@ -221,10 +228,18 @@ func readMakefile(mfile string) (maker *Maker) {
 
 func main() {
 	mfile := flag.String("f", "Makefile", "make file")
+	version := flag.Bool("v", false, "print version and exit")
+	dryrun := flag.Bool("n", false, "dry-run - print steps but don't execute them")
 	targets := flag.Bool("targets", false, "print available targets")
 	flag.Parse()
 
+	if *version {
+		printVersion()
+		return
+	}
+
 	maker := readMakefile(*mfile)
+	maker.dryrun = *dryrun
 
 	if *targets {
 		fmt.Println("\nAvailable targets:")
@@ -312,4 +327,49 @@ func modTime(target string) (tstamp time.Time) {
 	}
 
 	return fi.ModTime()
+}
+
+func printVersion() {
+	version := `
+	        .*,,..,///(
+	        .///#(/#(((
+	        ./*  **/(/#.
+	         *///&&&&%%
+	         (*, /%%%*.
+	         #*. *(%#*,
+	         %*. *(%%//
+	        ,#*. ,(#(/(
+	        #%/*(/&%%%%*
+	       /#&((#(&&/%            ________        __
+	      *%%%%(##&&(&(%#        /  _____/  ____ |  | __ ____
+	      &%&/####&&/%%#%*      /   \  ___ /  _ \|  |/ // __ \
+	     %##%(((%(%%&*#/  %     \    \_\  (  <_> )    <\  ___/
+	    /#((%*%&%(&%#%&    &     \______  /\____/|__|_ \\___  > v. 0.1
+	   .&&%(#(((&/%&%#(%    :           \/            \/    \/
+	   .&&&&&&&&&&&&&&((*,  .
+	   (%(#*&,  #&&&/((%((/#.
+	  ./#(/%(*(##(/#%#(/(/,
+	  /*#(#*(/(%###%#%(%#%#/*
+	  ##(%%#/(%@@(#%##&((/(#/
+	  #(%&&&&&@@@@@@@@@@&&%//
+	  (&%##(#/*@#%%%%##%*   /
+	  ##%%&@@@@@&&&&&&%((%* /
+	  #&&&@&%##@@%%@@@%@@@%%/
+	  .&@&@@&%#@@&&@@@%@@@%#/
+	   &@%@@&%%@@&&@@@%@@%%%.
+	   (@%@@&%%@@&@@@@&@@%%&
+	   ,@&@@&%%@@&@@@@&@&%%&
+	    @@@@&%%@@&@@@@@@%%%#
+	    &@&@@%%@&&@@@@@@%%%*
+	    &@&@@%%@&&@@@@@@%#&.
+	    &@&@&%%@&&@@@@@&%%&*
+	   /@@&&@%%@&&@@@@&&&@/&
+	   &&&@&&.%@&@@@@@&&&@&(,
+	  (&&&&&*%&&&&&@@@@&&%%%%
+	  (%&&%&&&%%&&%%%%@@##/ &
+	  //(%&&&&&%&###%%%%#** )
+	   */// ,(######(((%#&%(*
+	`
+
+	fmt.Println(strings.Replace(version, "\t", "", -1))
 }
