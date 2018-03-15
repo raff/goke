@@ -44,10 +44,31 @@ func (t *Target) String() string {
 
 }
 
+func (t *Target) expandRecipe(r int) (recipe string, silent bool) {
+	recipe = t.recipes[r]
+	if strings.HasPrefix(recipe, "@") {
+		recipe = strings.TrimSpace(recipe[1:])
+		silent = true
+	}
+
+	prereq := ""
+	if len(t.prereq) > 0 {
+		prereq = t.prereq[0]
+	}
+
+	recipe = strings.Replace(recipe, "$@", t.name, -1)
+	recipe = strings.Replace(recipe, "$<", prereq, -1)
+	return
+}
+
 type Maker struct {
 	targets map[string]*Target // targets
 	start   string             // main target
+	debug   bool
 	dryrun  bool
+	ignore  bool
+	keep    bool
+	silent  bool
 }
 
 func (m *Maker) AddTargets(targets, prereq, recipes []string) {
@@ -86,33 +107,38 @@ func (m *Maker) Process(target string, now time.Time) {
 		return
 	}
 
-	log.Printf("target %q\n", target)
-	if len(t.prereq) > 0 {
-		log.Printf("  dependencies: %q\n", t.prereq)
+	if m.debug {
+		log.Printf("target %q\n", target)
+		if len(t.prereq) > 0 {
+			log.Printf("  dependencies: %q\n", t.prereq)
+		}
 	}
 
 	for _, p := range t.prereq {
 		m.Process(p, now)
 	}
 
-	for _, r := range t.recipes {
-		if strings.HasPrefix(r, "@") {
-			r = strings.TrimSpace(r[1:])
-		} else {
-			log.Printf("  run %q\n", r)
+	for r := range t.recipes {
+		recipe, silent := t.expandRecipe(r)
+		silent = silent || m.silent
+
+		if m.debug {
+			log.Printf("  run %q\n", recipe)
+		} else if !silent {
+			fmt.Println(recipe)
 		}
 
 		if m.dryrun {
 			continue
 		}
 
-		ignore := false
-		if strings.HasPrefix(r, "-") {
-			r = strings.TrimSpace(r[1:])
+		ignore := m.ignore
+		if strings.HasPrefix(recipe, "-") {
+			recipe = strings.TrimSpace(recipe[1:])
 			ignore = true
 		}
 
-		if err := runCommand(r); err != nil && !ignore {
+		if err := runCommand(recipe); err != nil && !ignore {
 			log.Fatal(err)
 		}
 	}
@@ -234,9 +260,14 @@ func readMakefile(mfile string) (maker *Maker) {
 
 func main() {
 	mfile := flag.String("f", "Makefile", "make file")
-	version := flag.Bool("v", false, "print version and exit")
-	dryrun := flag.Bool("n", false, "dry-run - print steps but don't execute them")
 	targets := flag.Bool("targets", false, "print available targets")
+	version := flag.Bool("v", false, "print version and exit")
+	debug := flag.Bool("d", false, "debug logging")
+	dryrun := flag.Bool("n", false, "dry-run - print steps but don't execute them")
+	ignore := flag.Bool("i", false, "ignore errors")
+	keep := flag.Bool("k", false, "keep going")
+	silent := flag.Bool("s", false, "silent")
+
 	flag.Parse()
 
 	if *version {
@@ -245,7 +276,11 @@ func main() {
 	}
 
 	maker := readMakefile(*mfile)
+	maker.debug = *debug
 	maker.dryrun = *dryrun
+	maker.ignore = *ignore
+	maker.keep = *keep
+	maker.silent = *silent
 
 	if *targets {
 		fmt.Println("\nAvailable targets:")
