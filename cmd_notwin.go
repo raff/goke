@@ -9,6 +9,7 @@ import (
 
 func runCommand(line string) error {
 	cmd := exec.Command("sh", "-c", line)
+	cmd.Stdin = os.Stdin
 
 	if true { // should we have an option to ignore the output ?
 		cmd.Stdout = os.Stdout

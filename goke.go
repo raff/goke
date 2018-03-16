@@ -352,9 +352,9 @@ func parseTargets(parts []string) (targets []string, prereq []string) {
 		if p = strings.TrimSpace(p); p == ":" {
 			prereq = parts[i+1:]
 			return
-                }
+		}
 
-                targets = append(targets, p)
+		targets = append(targets, p)
 	}
 
 	return nil, nil
