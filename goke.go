@@ -188,15 +188,7 @@ func readMakefile(mfile string) (maker *Maker) {
 		}
 
 		line = expandVariables(line)
-		parts := args.GetArgs(line, args.UserTokens("=:"))
-
-		// remove comments
-		for i, p := range parts {
-			if strings.HasPrefix(p, "#") {
-				parts = parts[:i]
-				break
-			}
-		}
+		parts := cleanArguments(args.GetArgs(line, args.UserTokens("=:")))
 
 		//
 		// empty line
@@ -215,7 +207,6 @@ func readMakefile(mfile string) (maker *Maker) {
 		//
 		if state == SStart && len(parts) >= 2 && parts[1] == "=" {
 			vars[parts[0]] = strings.Join(parts[2:], " ")
-			line = ""
 			continue
 		}
 
@@ -338,25 +329,32 @@ func trimContinuation(line string) string {
 	return line
 }
 
+func cleanArguments(args []string) (ret []string) {
+	for _, a := range args {
+		if strings.HasPrefix(a, "#") { // stop at comments
+			break
+		}
+
+		if a != "" { // remove empty parts
+			ret = append(ret, a)
+		}
+	}
+
+	return
+}
+
 func fatalError(message, line string) {
 	log.Fatalf("%v near %q\n", message, line)
 }
 
 func parseTargets(parts []string) (targets []string, prereq []string) {
 	for i, p := range parts {
-		p = strings.TrimSpace(p)
-
-		switch p {
-		case "": // should check why I am getting this
-			continue
-
-		case ":": // target separator
+		if p = strings.TrimSpace(p); p == ":" {
 			prereq = parts[i+1:]
 			return
+                }
 
-		default:
-			targets = append(targets, p)
-		}
+                targets = append(targets, p)
 	}
 
 	return nil, nil
