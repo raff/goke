@@ -62,13 +62,13 @@ func (t *Target) expandRecipe(r int) (recipe string, silent bool) {
 }
 
 type Maker struct {
-	targets map[string]*Target // targets
-	start   string             // main target
-	debug   bool
-	dryrun  bool
-	ignore  bool
-	keep    bool
-	silent  bool
+	targets  map[string]*Target // targets
+	start    string             // main target
+	debug    bool
+	dryrun   bool
+	ignore   bool
+	keep     bool
+	silent   bool
 }
 
 func (m *Maker) AddTargets(targets, prereq, recipes []string) {
@@ -146,7 +146,7 @@ func (m *Maker) Process(target string, now time.Time) {
 	t.tstamp = time.Now()
 }
 
-func readMakefile(mfile string) (maker *Maker) {
+func readMakefile(mfile string, envFirst bool) (maker *Maker) {
 	f, err := os.Open(mfile)
 	if err != nil {
 		log.Fatal(err)
@@ -187,7 +187,7 @@ func readMakefile(mfile string) (maker *Maker) {
 			}
 		}
 
-		line = expandVariables(line)
+		line = expandVariables(line, envFirst)
 		parts := cleanArguments(args.GetArgs(line, args.UserTokens("=:")))
 
 		//
@@ -258,6 +258,7 @@ func main() {
 	ignore := flag.Bool("i", false, "ignore errors")
 	keep := flag.Bool("k", false, "keep going")
 	silent := flag.Bool("s", false, "silent")
+	envFirst := flag.Bool("e", false, "environment override")
 
 	flag.Parse()
 
@@ -266,7 +267,7 @@ func main() {
 		return
 	}
 
-	maker := readMakefile(*mfile)
+	maker := readMakefile(*mfile, *envFirst)
 	maker.debug = *debug
 	maker.dryrun = *dryrun
 	maker.ignore = *ignore
@@ -292,10 +293,10 @@ func main() {
 	}
 }
 
-var reVar = regexp.MustCompile(`\$(\w+|\(\w+\)|\(ENV.\w+\))`) // $var or $(var)
+var reVar = regexp.MustCompile(`\$(\w+|\(\w+\))`) // $var or $(var)
 var vars = map[string]string{}
 
-func expandVariables(line string) string {
+func expandVariables(line string, envFirst bool) string {
 	for {
 		// fmt.Println("before expand:", line)
 		found := false
@@ -307,11 +308,17 @@ func expandVariables(line string) string {
 			arg := strings.TrimLeft(s, "$(")
 			arg = strings.TrimRight(arg, ")")
 
-			if strings.HasPrefix(arg, "ENV.") {
-				return os.Getenv(arg[4:])
+			if envFirst {
+				if v, ok := os.LookupEnv(arg); ok {
+					return v
+				}
 			}
 
-			return vars[arg]
+			if v, ok := vars[arg]; ok {
+				return v
+			}
+
+			return os.Getenv(arg)
 		})
 
 		// fmt.Println("after expand:", line)
