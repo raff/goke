@@ -62,13 +62,13 @@ func (t *Target) expandRecipe(r int) (recipe string, silent bool) {
 }
 
 type Maker struct {
-	targets  map[string]*Target // targets
-	start    string             // main target
-	debug    bool
-	dryrun   bool
-	ignore   bool
-	keep     bool
-	silent   bool
+	targets map[string]*Target // targets
+	start   string             // main target
+	debug   bool
+	dryrun  bool
+	ignore  bool
+	keep    bool
+	silent  bool
 }
 
 func (m *Maker) AddTargets(targets, prereq, recipes []string) {
@@ -146,7 +146,7 @@ func (m *Maker) Process(target string, now time.Time) {
 	t.tstamp = time.Now()
 }
 
-func readMakefile(mfile string, envFirst bool) (maker *Maker) {
+func readMakefile(mfile string, envFirst, debug bool) (maker *Maker) {
 	f, err := os.Open(mfile)
 	if err != nil {
 		log.Fatal(err)
@@ -190,6 +190,10 @@ func readMakefile(mfile string, envFirst bool) (maker *Maker) {
 		line = expandVariables(line, envFirst)
 		parts := cleanArguments(args.GetArgs(line, args.UserTokens("=:")))
 
+		if debug {
+			log.Println(parts)
+		}
+
 		//
 		// empty line
 		// finish up and reset the state
@@ -207,6 +211,11 @@ func readMakefile(mfile string, envFirst bool) (maker *Maker) {
 		//
 		if state == SStart && len(parts) >= 2 && parts[1] == "=" {
 			vars[parts[0]] = strings.Join(parts[2:], " ")
+			continue
+		}
+
+		if state == SStart && len(parts) >= 3 && parts[1] == ":" && parts[2] == "=" {
+			vars[parts[0]] = strings.Join(parts[3:], " ")
 			continue
 		}
 
@@ -267,7 +276,7 @@ func main() {
 		return
 	}
 
-	maker := readMakefile(*mfile, *envFirst)
+	maker := readMakefile(*mfile, *envFirst, *debug)
 	maker.debug = *debug
 	maker.dryrun = *dryrun
 	maker.ignore = *ignore
@@ -307,6 +316,11 @@ func expandVariables(line string, envFirst bool) string {
 			// ReplaceAll doesn't return submatches so we need to cleanup
 			arg := strings.TrimLeft(s, "$(")
 			arg = strings.TrimRight(arg, ")")
+
+			if strings.HasPrefix(arg, "shell ") {
+				// here we should run the remaining string as a shell command
+				// and collect the output
+			}
 
 			if envFirst {
 				if v, ok := os.LookupEnv(arg); ok {
