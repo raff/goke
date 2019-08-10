@@ -320,8 +320,6 @@ func expandVariables(line string, envFirst, debug bool) string {
 			arg := strings.TrimLeft(s, "$(")
 			arg = strings.TrimRight(arg, ")")
 
-			log.Println("REP", s, "ARG", arg)
-
 			if strings.HasPrefix(arg, "shell ") {
 				// here we should run the remaining string as a shell command
 				// and collect the output
