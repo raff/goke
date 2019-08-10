@@ -138,7 +138,7 @@ func (m *Maker) Process(target string, now time.Time) {
 			ignore = true
 		}
 
-		if err := runCommand(recipe); err != nil && !ignore {
+		if _, err := runCommand(recipe, false); err != nil && !ignore {
 			log.Fatal(err)
 		}
 	}
@@ -187,7 +187,7 @@ func readMakefile(mfile string, envFirst, debug bool) (maker *Maker) {
 			}
 		}
 
-		line = expandVariables(line, envFirst)
+		line = expandVariables(line, envFirst, debug)
 		parts := cleanArguments(args.GetArgs(line, args.UserTokens("=:")))
 
 		if debug {
@@ -302,12 +302,15 @@ func main() {
 	}
 }
 
-var reVar = regexp.MustCompile(`\$(\w+|\(\w+\))`) // $var or $(var)
+var reVar = regexp.MustCompile(`\$(\w+|\([^\)]+\))`) // $var or $(var)
 var vars = map[string]string{}
 
-func expandVariables(line string, envFirst bool) string {
+func expandVariables(line string, envFirst, debug bool) string {
 	for {
-		// fmt.Println("before expand:", line)
+		if debug {
+			log.Println("before expand:", line)
+		}
+
 		found := false
 
 		line = reVar.ReplaceAllStringFunc(line, func(s string) string {
@@ -317,9 +320,17 @@ func expandVariables(line string, envFirst bool) string {
 			arg := strings.TrimLeft(s, "$(")
 			arg = strings.TrimRight(arg, ")")
 
+			log.Println("REP", s, "ARG", arg)
+
 			if strings.HasPrefix(arg, "shell ") {
 				// here we should run the remaining string as a shell command
 				// and collect the output
+
+				if res, err := runCommand(arg[6:], true); err != nil {
+					log.Fatal(err)
+				} else {
+					return res
+				}
 			}
 
 			if envFirst {
@@ -335,7 +346,10 @@ func expandVariables(line string, envFirst bool) string {
 			return os.Getenv(arg)
 		})
 
-		// fmt.Println("after expand:", line)
+		if debug {
+			log.Println("after expand:", line)
+		}
+
 		if !found {
 			break
 		}
