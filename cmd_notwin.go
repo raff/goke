@@ -25,14 +25,3 @@ func runCommand(line string, out bool) (string, error) {
 
 	return "", cmd.Run()
 }
-
-func outputCommand(line string) ([]byte, error) {
-	cmd := exec.Command("sh", "-c", line)
-	cmd.Stdin = os.Stdin
-
-	if true { // should we have an option to ignore the output ?
-		cmd.Stderr = os.Stderr
-	}
-
-	return cmd.Output()
-}
