@@ -62,6 +62,7 @@ func (t *Target) expandRecipe(r int) (recipe string, silent bool) {
 }
 
 type Maker struct {
+	phony   map[string]bool
 	targets map[string]*Target // targets
 	start   string             // main target
 	debug   bool
@@ -81,7 +82,7 @@ func (m *Maker) AddTargets(targets, prereq, recipes []string) {
 			log.Fatalf("target %q already exists\n", t)
 		}
 
-		m.targets[t] = &Target{name: t, prereq: prereq, recipes: recipes, tstamp: modTime(t)}
+		m.targets[t] = &Target{name: t, prereq: prereq, recipes: recipes, tstamp: modTime(t, m.phony[t])}
 	}
 }
 
@@ -92,7 +93,7 @@ func (m *Maker) Process(target string, now time.Time) {
 
 	t := m.targets[target]
 	if t == nil {
-		mtime := modTime(target)
+		mtime := modTime(target, m.phony[target])
 		if mtime.IsZero() {
 			log.Fatalf("unknown target %q\n", target)
 			return
@@ -154,7 +155,7 @@ func readMakefile(mfile string, envFirst, debug bool) (maker *Maker) {
 
 	defer f.Close()
 
-	maker = &Maker{targets: map[string]*Target{}}
+	maker = &Maker{targets: map[string]*Target{}, phony: map[string]bool{}}
 
 	scanner := bufio.NewScanner(f)
 	state := SStart
@@ -187,6 +188,8 @@ func readMakefile(mfile string, envFirst, debug bool) (maker *Maker) {
 			}
 		}
 
+		// this doesn't take into consideration recursively expanded variables
+		// that should evaluated when used
 		line = expandVariables(line, envFirst)
 		parts := cleanArguments(args.GetArgs(line, args.UserTokens("=:")))
 
@@ -209,11 +212,14 @@ func readMakefile(mfile string, envFirst, debug bool) (maker *Maker) {
 		//
 		// variable assignment
 		//
+
+		// recursively expanded (this should be evaluated when used)
 		if state == SStart && len(parts) >= 2 && parts[1] == "=" {
 			vars[parts[0]] = strings.Join(parts[2:], " ")
 			continue
 		}
 
+		// simply expanded (this should evaluated when defined)
 		if state == SStart && len(parts) >= 3 && parts[1] == ":" && parts[2] == "=" {
 			vars[parts[0]] = strings.Join(parts[3:], " ")
 			continue
@@ -243,6 +249,20 @@ func readMakefile(mfile string, envFirst, debug bool) (maker *Maker) {
 			targets, prereq = parseTargets(parts)
 			if targets == nil {
 				fatalError("invalid target", line)
+			}
+
+			if len(targets) == 1 && targets[0] == ".PHONY" {
+				if len(prereq) == 0 {
+					fatalError("invalid .PHONY target", line)
+				}
+
+				for _, t := range prereq {
+					maker.phony[t] = true
+				}
+
+				targets = nil
+				prereq = nil
+				continue
 			}
 
 			state = SRecipe
@@ -320,6 +340,12 @@ func expandVariables(line string, envFirst bool) string {
 			if strings.HasPrefix(arg, "shell ") {
 				// here we should run the remaining string as a shell command
 				// and collect the output
+				res, err := outputCommand(arg[6:])
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				return string(res)
 			}
 
 			if envFirst {
@@ -381,7 +407,11 @@ func parseTargets(parts []string) (targets []string, prereq []string) {
 	return nil, nil
 }
 
-func modTime(target string) (tstamp time.Time) {
+func modTime(target string, phony bool) (tstamp time.Time) {
+	if phony {
+		return
+	}
+
 	fi, err := os.Lstat(target)
 	if err != nil {
 		// log.Println(err)
