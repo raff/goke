@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-func runCommand(line string, out bool) error {
+func runCommand(line string, out bool) (string, error) {
 	cmd := exec.Command("sh", "-c", line)
 	cmd.Stdin = os.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
