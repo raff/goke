@@ -317,13 +317,23 @@ func main() {
 		maker.Process("", time.Now())
 	} else {
 		for _, target := range flag.Args() {
+			assign := reAssign.FindStringSubmatch(target)
+			if len(assign) > 0 {
+				vars[assign[1]] = assign[2]
+				fmt.Println(vars)
+				continue
+			}
+
 			maker.Process(target, time.Now())
 		}
 	}
 }
 
-var reVar = regexp.MustCompile(`\$(\w+|\([^\)]+\))`) // $var or $(var)
-var vars = map[string]string{}
+var (
+	reAssign = regexp.MustCompile(`(\w+)=(.*)`)
+	reVar    = regexp.MustCompile(`\$(\w+|\([^\)]+\))`) // $var or $(var)
+	vars     = map[string]string{}
+)
 
 func expandVariables(line string, envFirst, debug bool) string {
 	for {
